@@ -39,6 +39,7 @@ process.on('SIGTERM', () => {
 });
 
 // Start server
+const port = process.env.PORT || PORT || 5000;
 server.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log(`🚀 Server running in ${NODE_ENV} mode`);
