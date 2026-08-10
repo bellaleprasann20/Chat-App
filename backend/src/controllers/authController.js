@@ -53,6 +53,7 @@ const register = async (req, res) => {
         _id: user._id,
         username: user.username,
         email: user.email,
+        avatar: user.avatar, // Added avatar
         createdAt: user.createdAt
       }
     });
@@ -112,6 +113,7 @@ const login = async (req, res) => {
         username: user.username,
         email: user.email,
         bio: user.bio,
+        avatar: user.avatar, // Added avatar
         createdAt: user.createdAt
       }
     });
@@ -146,6 +148,7 @@ const getProfile = async (req, res) => {
         username: user.username,
         email: user.email,
         bio: user.bio,
+        avatar: user.avatar, // Added avatar
         createdAt: user.createdAt
       }
     });
@@ -164,7 +167,7 @@ const getProfile = async (req, res) => {
 // @access  Private
 const updateProfile = async (req, res) => {
   try {
-    const { username, email, bio } = req.body;
+    const { username, email, bio, avatar } = req.body; // Avatar is extracted here
 
     const user = await User.findById(req.user._id);
 
@@ -200,6 +203,7 @@ const updateProfile = async (req, res) => {
     user.username = username || user.username;
     user.email = email || user.email;
     user.bio = bio !== undefined ? bio : user.bio;
+    user.avatar = avatar !== undefined ? avatar : user.avatar; // FIX: Actually save the avatar to the database
 
     await user.save();
 
@@ -210,6 +214,7 @@ const updateProfile = async (req, res) => {
         username: user.username,
         email: user.email,
         bio: user.bio,
+        avatar: user.avatar, // FIX: Return the avatar to the frontend
         createdAt: user.createdAt
       }
     });
