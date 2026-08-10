@@ -5,7 +5,6 @@ const User = require('../models/User');
 const randomChatService = require('../services/randomChatService');
 const chatBotService = require('../services/chatBotService');
 
-
 // Store online users: { userId: socketId }
 const onlineUsers = new Map();
 
@@ -61,6 +60,10 @@ const setupSocket = (server) => {
     
     // Emit online users count
     io.emit('onlineUsersCount', onlineUsers.size);
+
+    // ============================================
+    // STANDARD CHAT EVENTS
+    // ============================================
 
     // Join room event
     socket.on('joinRoom', async ({ roomId, userId }) => {
@@ -182,26 +185,201 @@ const setupSocket = (server) => {
       });
     });
 
-    // Disconnect event
+    // ============================================
+    // RANDOM CHAT EVENTS
+    // ============================================
+
+    // Find random stranger
+    socket.on('findRandomStranger', async ({ interests }) => {
+      try {
+        // Add to queue
+        randomChatService.addToQueue(socket.userId, {
+          socketId: socket.id,
+          username: socket.username,
+          interests: interests || []
+        });
+
+        // Try to find match
+        const match = randomChatService.findMatch(socket.userId);
+
+        if (match) {
+          // Found a real user!
+          const currentUser = {
+            userId: socket.userId,
+            socketId: socket.id,
+            username: socket.username
+          };
+
+          const roomId = randomChatService.createRandomChat(currentUser, match);
+
+          // Join both users to room
+          socket.join(roomId);
+          io.sockets.sockets.get(match.socketId)?.join(roomId);
+
+          // Notify both users
+          socket.emit('strangerConnected', {
+            roomId,
+            isBot: false,
+            message: 'You are now chatting with a random stranger!'
+          });
+
+          io.to(match.socketId).emit('strangerConnected', {
+            roomId,
+            isBot: false,
+            message: 'You are now chatting with a random stranger!'
+          });
+
+          console.log(`✅ Matched ${socket.username} with ${match.username}`);
+        } else {
+          // No match, keep searching
+          socket.emit('searchingForStranger', {
+            message: 'Looking for someone to chat with...',
+            queuePosition: randomChatService.getQueueStats().waiting
+          });
+
+          // After 10 seconds, connect to bot if still no match
+          setTimeout(() => {
+            if (!randomChatService.isUserInChat(socket.userId)) {
+              const botRoomId = randomChatService.createBotChat(socket.userId);
+              socket.join(botRoomId);
+
+              socket.emit('strangerConnected', {
+                roomId: botRoomId,
+                isBot: true,
+                message: 'Connected to AI Bot! (No users available)'
+              });
+
+              // Send bot greeting
+              setTimeout(async () => {
+                const greeting = await chatBotService.getBotResponse(botRoomId, 'Hi');
+                socket.emit('randomMessage', {
+                  content: greeting,
+                  isBot: true,
+                  isYou: false,
+                  timestamp: new Date()
+                });
+              }, 1000);
+
+              console.log(`🤖 Connected ${socket.username} to bot`);
+            }
+          }, 10000);
+        }
+      } catch (error) {
+        console.error('Find stranger error:', error);
+        socket.emit('error', { message: 'Failed to find stranger' });
+      }
+    });
+
+    // Stop searching
+    socket.on('stopSearching', () => {
+      randomChatService.removeFromQueue(socket.userId);
+      socket.emit('searchingStopped');
+    });
+
+    // Skip current stranger
+    socket.on('skipStranger', () => {
+      const roomId = randomChatService.getRoomByUser(socket.userId);
+      if (!roomId) return;
+
+      const isBot = randomChatService.isBotChat(roomId);
+      const partner = randomChatService.getPartner(socket.userId);
+
+      // End current chat
+      randomChatService.endChat(socket.userId);
+      
+      if (isBot) {
+        chatBotService.clearHistory(roomId);
+      }
+
+      socket.leave(roomId);
+
+      // Notify partner if real user
+      if (partner && partner !== 'bot') {
+        io.to(partner).emit('strangerDisconnected', {
+          message: 'Stranger has disconnected.'
+        });
+        randomChatService.endChat(partner);
+      }
+
+      // Emit event to start new search
+      socket.emit('strangerSkipped');
+    });
+
+    // Send message in random chat
+    socket.on('sendRandomMessage', async ({ roomId, content }) => {
+      try {
+        const isBot = randomChatService.isBotChat(roomId);
+
+        if (isBot) {
+          // Send to self
+          socket.emit('randomMessage', {
+            content,
+            isBot: false,
+            isYou: true,
+            timestamp: new Date()
+          });
+
+          // Get bot response
+          const botResponse = await chatBotService.getBotResponse(roomId, content);
+
+          // Send bot response after short delay
+          setTimeout(() => {
+            socket.emit('randomMessage', {
+              content: botResponse,
+              isBot: true,
+              isYou: false,
+              timestamp: new Date()
+            });
+          }, 1000 + Math.random() * 1000); // 1-2 second delay
+        } else {
+          // Send to partner
+          socket.to(roomId).emit('randomMessage', {
+            content,
+            isBot: false,
+            isYou: false,
+            timestamp: new Date()
+          });
+
+          // Send back to sender
+          socket.emit('randomMessage', {
+            content,
+            isBot: false,
+            isYou: true,
+            timestamp: new Date()
+          });
+        }
+      } catch (error) {
+        console.error('Send random message error:', error);
+      }
+    });
+
+    // Typing indicator for random chat
+    socket.on('randomChatTyping', ({ roomId, isTyping }) => {
+      const isBot = randomChatService.isBotChat(roomId);
+      if (!isBot) {
+        socket.to(roomId).emit('strangerTyping', { isTyping });
+      }
+    });
+
+    // ============================================
+    // DISCONNECT EVENT (Merged Cleanup)
+    // ============================================
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.username} (${socket.id})`);
       
-      // Remove user from online users
+      // 1. Standard Chat Cleanup
       onlineUsers.delete(socket.userId);
       
-      // Remove user from all rooms
       roomMembers.forEach((members, roomId) => {
         if (members.has(socket.userId)) {
           members.delete(socket.userId);
           
-          // Notify room members
           io.to(roomId).emit('userLeft', {
             userId: socket.userId,
             username: socket.username,
             timestamp: new Date()
           });
 
-          // Update online users in the room
           const roomUserIds = Array.from(members);
           const roomUsers = roomUserIds
             .filter(id => onlineUsers.has(id))
@@ -213,224 +391,43 @@ const setupSocket = (server) => {
           
           io.to(roomId).emit('onlineUsers', roomUsers);
           
-          // Clean up empty room
           if (members.size === 0) {
             roomMembers.delete(roomId);
           }
         }
       });
 
-      // Emit updated online users count
       io.emit('onlineUsersCount', onlineUsers.size);
+
+      // 2. Random Chat Cleanup
+      try {
+        randomChatService.removeFromQueue(socket.userId);
+        
+        const randomRoomId = randomChatService.getRoomByUser(socket.userId);
+        if (randomRoomId) {
+          const isBot = randomChatService.isBotChat(randomRoomId);
+          const partner = randomChatService.getPartner(socket.userId);
+          
+          if (isBot) {
+            chatBotService.clearHistory(randomRoomId);
+          } else if (partner && partner !== 'bot') {
+            io.to(partner).emit('strangerDisconnected', {
+              message: 'Stranger has disconnected.'
+            });
+          }
+          
+          randomChatService.endChat(socket.userId);
+        }
+      } catch (error) {
+        console.error('Error during random chat disconnect cleanup:', error);
+      }
     });
 
     // Error handling
     socket.on('error', (error) => {
       console.error('Socket error:', error);
     });
-  
-// Add these socket events inside io.on('connection', (socket) => { ... })
 
-// ============================================
-// RANDOM CHAT EVENTS
-// ============================================
-
-// Find random stranger
-socket.on('findRandomStranger', async ({ interests }) => {
-  try {
-    // Add to queue
-    randomChatService.addToQueue(socket.userId, {
-      socketId: socket.id,
-      username: socket.username,
-      interests: interests || []
-    });
-
-    // Try to find match
-    const match = randomChatService.findMatch(socket.userId);
-
-    if (match) {
-      // Found a real user!
-      const currentUser = {
-        userId: socket.userId,
-        socketId: socket.id,
-        username: socket.username
-      };
-
-      const roomId = randomChatService.createRandomChat(currentUser, match);
-
-      // Join both users to room
-      socket.join(roomId);
-      io.sockets.sockets.get(match.socketId)?.join(roomId);
-
-      // Notify both users
-      socket.emit('strangerConnected', {
-        roomId,
-        isBot: false,
-        message: 'You are now chatting with a random stranger!'
-      });
-
-      io.to(match.socketId).emit('strangerConnected', {
-        roomId,
-        isBot: false,
-        message: 'You are now chatting with a random stranger!'
-      });
-
-      console.log(`✅ Matched ${socket.username} with ${match.username}`);
-    } else {
-      // No match, keep searching
-      socket.emit('searchingForStranger', {
-        message: 'Looking for someone to chat with...',
-        queuePosition: randomChatService.getQueueStats().waiting
-      });
-
-      // After 10 seconds, connect to bot if still no match
-      setTimeout(() => {
-        if (!randomChatService.isUserInChat(socket.userId)) {
-          const botRoomId = randomChatService.createBotChat(socket.userId);
-          socket.join(botRoomId);
-
-          socket.emit('strangerConnected', {
-            roomId: botRoomId,
-            isBot: true,
-            message: 'Connected to AI Bot! (No users available)'
-          });
-
-          // Send bot greeting
-          setTimeout(async () => {
-            const greeting = await chatBotService.getBotResponse(botRoomId, 'Hi');
-            socket.emit('randomMessage', {
-              content: greeting,
-              isBot: true,
-              isYou: false,
-              timestamp: new Date()
-            });
-          }, 1000);
-
-          console.log(`🤖 Connected ${socket.username} to bot`);
-        }
-      }, 10000);
-    }
-  } catch (error) {
-    console.error('Find stranger error:', error);
-    socket.emit('error', { message: 'Failed to find stranger' });
-  }
-});
-
-// Stop searching
-socket.on('stopSearching', () => {
-  randomChatService.removeFromQueue(socket.userId);
-  socket.emit('searchingStopped');
-});
-
-// Skip current stranger
-socket.on('skipStranger', () => {
-  const roomId = randomChatService.getRoomByUser(socket.userId);
-  if (!roomId) return;
-
-  const isBot = randomChatService.isBotChat(roomId);
-  const partner = randomChatService.getPartner(socket.userId);
-
-  // End current chat
-  randomChatService.endChat(socket.userId);
-  
-  if (isBot) {
-    chatBotService.clearHistory(roomId);
-  }
-
-  socket.leave(roomId);
-
-  // Notify partner if real user
-  if (partner && partner !== 'bot') {
-    io.to(partner).emit('strangerDisconnected', {
-      message: 'Stranger has disconnected.'
-    });
-    randomChatService.endChat(partner);
-  }
-
-  // Emit event to start new search
-  socket.emit('strangerSkipped');
-});
-
-// Send message in random chat
-socket.on('sendRandomMessage', async ({ roomId, content }) => {
-  try {
-    const isBot = randomChatService.isBotChat(roomId);
-
-    if (isBot) {
-      // Send to self
-      socket.emit('randomMessage', {
-        content,
-        isBot: false,
-        isYou: true,
-        timestamp: new Date()
-      });
-
-      // Get bot response
-      const botResponse = await chatBotService.getBotResponse(roomId, content);
-
-      // Send bot response after short delay
-      setTimeout(() => {
-        socket.emit('randomMessage', {
-          content: botResponse,
-          isBot: true,
-          isYou: false,
-          timestamp: new Date()
-        });
-      }, 1000 + Math.random() * 1000); // 1-2 second delay
-    } else {
-      // Send to partner
-      socket.to(roomId).emit('randomMessage', {
-        content,
-        isBot: false,
-        isYou: false,
-        timestamp: new Date()
-      });
-
-      // Send back to sender
-      socket.emit('randomMessage', {
-        content,
-        isBot: false,
-        isYou: true,
-        timestamp: new Date()
-      });
-    }
-  } catch (error) {
-    console.error('Send random message error:', error);
-  }
-});
-
-// Typing indicator for random chat
-socket.on('randomChatTyping', ({ roomId, isTyping }) => {
-  const isBot = randomChatService.isBotChat(roomId);
-  if (!isBot) {
-    socket.to(roomId).emit('strangerTyping', { isTyping });
-  }
-});
-
-// When user disconnects
-// (Add this to existing disconnect handler)
-const existingDisconnectHandler = socket.on('disconnect', () => {
-  // ... existing disconnect code ...
-  
-  // Add random chat cleanup
-  randomChatService.removeFromQueue(socket.userId);
-  
-  const roomId = randomChatService.getRoomByUser(socket.userId);
-  if (roomId) {
-    const isBot = randomChatService.isBotChat(roomId);
-    const partner = randomChatService.getPartner(socket.userId);
-    
-    if (isBot) {
-      chatBotService.clearHistory(roomId);
-    } else if (partner && partner !== 'bot') {
-      io.to(partner).emit('strangerDisconnected', {
-        message: 'Stranger has disconnected.'
-      });
-    }
-    
-    randomChatService.endChat(socket.userId);
-  }
-});
   });
 
   return io;

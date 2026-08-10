@@ -31,8 +31,9 @@ socket.on('disconnect', (reason) => {
 socket.on('connect_error', (error) => {
   console.error('❌ Socket connection error:', error.message);
   
-  // Handle authentication errors
-  if (error.message === 'Authentication error') {
+  // Handle authentication errors safely by checking if the message *includes* the string
+  if (error.message.includes('Authentication error')) {
+    console.log('Clearing invalid token and redirecting to login...');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';

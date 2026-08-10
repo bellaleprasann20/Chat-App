@@ -10,7 +10,7 @@ const Chat = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -27,7 +27,6 @@ const Chat = () => {
     setupSocketListeners();
 
     return () => {
-      // Cleanup socket listeners
       socket.off('message');
       socket.off('userJoined');
       socket.off('userLeft');
@@ -40,32 +39,25 @@ const Chat = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // First, get room details
+
       const roomResponse = await api.get(`/chat/rooms/${roomId}`);
       const roomData = roomResponse.data.data || roomResponse.data;
       setRoom(roomData);
 
-      // Check if user is a member, if not, join the room
       const isMember = roomData.members?.some(
         member => (member._id || member.id || member) === (user._id || user.id)
       );
 
       if (!isMember) {
-        console.log('User not a member, joining room...');
         await api.post(`/chat/rooms/${roomId}/join`);
-        
-        // Refresh room data after joining
         const updatedRoomResponse = await api.get(`/chat/rooms/${roomId}`);
         setRoom(updatedRoomResponse.data.data || updatedRoomResponse.data);
       }
 
-      // Fetch messages
       const messagesResponse = await api.get(`/messages/${roomId}`);
       const messagesData = messagesResponse.data.data || messagesResponse.data || [];
       setMessages(Array.isArray(messagesData) ? messagesData : []);
 
-      // Join room via socket
       socket.emit('joinRoom', { roomId, userId: user._id || user.id });
 
     } catch (err) {
@@ -77,24 +69,18 @@ const Chat = () => {
   };
 
   const setupSocketListeners = () => {
-    // Listen for new messages
     socket.on('message', (message) => {
       setMessages((prev) => [...prev, message]);
     });
 
-    // Listen for user joined
     socket.on('userJoined', (data) => {
       console.log('User joined:', data);
-      // Optionally show a notification
     });
 
-    // Listen for user left
     socket.on('userLeft', (data) => {
       console.log('User left:', data);
-      // Optionally show a notification
     });
 
-    // Listen for online users update
     socket.on('onlineUsers', (users) => {
       setOnlineUsers(users);
     });
@@ -108,10 +94,8 @@ const Chat = () => {
         sender: user._id || user.id
       };
 
-      // Send via socket for real-time update
       socket.emit('sendMessage', messageData);
 
-      // Also save to database via API
       await api.post('/messages', {
         chat: roomId,
         content
