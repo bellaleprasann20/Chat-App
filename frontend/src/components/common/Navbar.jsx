@@ -79,11 +79,11 @@ const Navbar = ({ title = 'ChatApp' }) => {
       {/* Slide-in Menu */}
       {showMenu && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-50"
+         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
           onClick={() => setShowMenu(false)}
         >
           <div
-            className="absolute right-0 top-0 bottom-0 w-72 bg-white shadow-2xl transform transition-transform duration-300 animate-slide-in"
+           className="absolute right-0 top-0 bottom-0 w-72 bg-white shadow-2xl transform transition-transform duration-300 animate-slide-in"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Menu Header */}
@@ -101,9 +101,14 @@ const Navbar = ({ title = 'ChatApp' }) => {
               {/* User Profile Section */}
               <div className="text-center">
                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
-                  <span className="text-3xl font-bold text-blue-500">
-                    {user?.username?.charAt(0).toUpperCase()}
-                  </span>
+                  {/* Dynamic Avatar Check */}
+                  {user?.avatar ? (
+                    <span className="text-5xl">{user.avatar}</span>
+                  ) : (
+                    <span className="text-3xl font-bold text-blue-500">
+                      {user?.username?.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <p className="text-white font-semibold text-lg">{user?.username}</p>
                 <p className="text-blue-100 text-sm">{user?.email}</p>
@@ -195,7 +200,7 @@ const Navbar = ({ title = 'ChatApp' }) => {
                 ChatApp v1.0.0
               </p>
               <p className="text-xs text-gray-400 text-center mt-1">
-                © 2024 All rights reserved
+                © 2026 All rights reserved
               </p>
             </div>
           </div>

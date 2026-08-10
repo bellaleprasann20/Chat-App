@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Plus, Users, Search, ChevronRight, X, Zap, Sparkles } from 'lucide-react';
+import { MessageSquare, Plus, Users, Search, ChevronRight, X, Zap, Sparkles, Radio, ShieldCheck, Flame } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import { RoomSkeleton } from '../components/common/Loader';
@@ -64,7 +64,7 @@ const Home = () => {
 
       <div className="max-w-3xl mx-auto px-4 pt-8">
         {/* Header Section */}
-        <div className="mb-10 flex justify-between items-end">
+        <div className="mb-6 flex justify-between items-end">
           <div>
             <h2 className="text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-blue-800 to-indigo-900">
               Messages
@@ -73,6 +73,43 @@ const Home = () => {
               <Sparkles size={16} className="text-indigo-500" />
               <p className="text-slate-500 font-medium">Your active conversations</p>
             </div>
+          </div>
+        </div>
+
+        {/* Live Status Banner Card */}
+        <div className="mb-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden border border-slate-800">
+          {/* Background Ambient Glows */}
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="flex items-center space-x-1.5 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full text-emerald-400 text-xs font-bold tracking-wider uppercase">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span>System Online</span>
+                </div>
+                <div className="flex items-center space-x-1 bg-blue-500/10 border border-blue-500/30 px-3 py-1 rounded-full text-blue-300 text-xs font-bold">
+                  <Flame size={12} className="text-amber-400" />
+                  <span>{rooms.length} Rooms Active</span>
+                </div>
+              </div>
+              <h3 className="text-xl font-black tracking-tight text-white">Ready to connect?</h3>
+              <p className="text-slate-300 text-sm mt-1 font-medium">
+                Jump into any conversation below or spark a new one with your custom emoji avatar!
+              </p>
+            </div>
+
+            <button
+              onClick={() => navigate('/random')}
+              className="px-5 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold text-sm rounded-2xl shadow-lg shadow-blue-500/25 transition-all duration-300 active:scale-95 flex items-center space-x-2 whitespace-nowrap"
+            >
+              <Zap size={16} className="text-amber-300" />
+              <span>Try Random Chat</span>
+            </button>
           </div>
         </div>
 
@@ -94,15 +131,15 @@ const Home = () => {
         {loading ? (
           <RoomSkeleton />
         ) : filteredRooms.length === 0 ? (
-          <div className="text-center py-20 px-4">
-            <div className="w-32 h-32 bg-gradient-to-tr from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-white">
-              <MessageSquare size={56} className="text-blue-400 drop-shadow-sm" />
+          <div className="text-center py-16 px-4 bg-white/40 backdrop-blur-md rounded-[2.5rem] border border-white/80 shadow-sm">
+            <div className="w-28 h-28 bg-gradient-to-tr from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-white">
+              <MessageSquare size={48} className="text-blue-400 drop-shadow-sm" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-3 tracking-tight">
+            <h3 className="text-2xl font-bold text-slate-800 mb-2 tracking-tight">
               {searchQuery ? 'No matches found' : 'It\'s awfully quiet'}
             </h3>
-            <p className="text-slate-500 font-medium mb-8 text-lg">
-              {searchQuery ? 'Try adjusting your search terms.' : 'Create a room to spark a conversation.'}
+            <p className="text-slate-500 font-medium mb-6 text-base max-w-sm mx-auto">
+              {searchQuery ? 'Try adjusting your search terms.' : 'Create your first chat room using the button below to get the conversation started!'}
             </p>
           </div>
         ) : (

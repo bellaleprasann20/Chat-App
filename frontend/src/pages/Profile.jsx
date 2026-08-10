@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Mail, User as UserIcon, Calendar, Edit2, Save, X, MessageSquare, Users2, Sparkles, Smile } from 'lucide-react';
 import Navbar from '../components/common/Navbar';
@@ -36,8 +36,20 @@ const Profile = () => {
     username: user?.username || '',
     email: user?.email || '',
     bio: user?.bio || '',
-    avatar: user?.avatar || '' // Added avatar state
+    avatar: user?.avatar || ''
   });
+
+  // Keep form data synced if the global user state changes or reloads
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        email: user.email || '',
+        bio: user.bio || '',
+        avatar: user.avatar || ''
+      });
+    }
+  }, [user]);
 
   const avatarGradient = gradientFor(user?.username);
 
@@ -60,7 +72,10 @@ const Profile = () => {
     try {
       setLoading(true);
       const response = await api.put('/auth/profile', formData);
-      updateUser(response.data);
+      
+      // Fixed: extract .user from response to match backend structure
+      updateUser(response.data.user); 
+      
       setSuccess('Profile updated successfully!');
       setIsEditing(false);
     } catch (err) {
